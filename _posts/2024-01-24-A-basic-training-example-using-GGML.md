@@ -1,3 +1,5 @@
+# A Basic Training Example Using ggml
+
 I just want to share what I have been working on recently. This is an [example](https://github.com/bssrdf/ggml/blob/one-adam-opt-call/examples/vae/mnist-vae2.cpp) of training a MNIST VAE. The goal is to use only `ggml` pipeline and its implementation of ADAM optimizer. 
 
 There aren't many training examples using `ggml`. ~The only one I found is [baby-llama](https://github.com/xaedes/llama.cpp/blob/train-example/examples/baby-llama/baby-llama.cpp). But I think its way of doing opmization is not quite right.~ Found another [training example ](https://github.com/ggerganov/llama.cpp/tree/master/examples/train-text-from-scratch) in `llama.cpp` which shows a proper way of using Adam.
