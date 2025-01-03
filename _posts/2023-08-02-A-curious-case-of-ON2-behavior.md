@@ -1,3 +1,5 @@
+# A curious case of O(N^2) behavior which should be O(N)
+
 ## Motivation
 
 Recently I got interested in Blender 3D, partly inspired by [infinigen project](https://github.com/princeton-vl/infinigen).
