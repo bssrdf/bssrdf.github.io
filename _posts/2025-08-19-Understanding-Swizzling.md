@@ -11,7 +11,7 @@ The ```DefaultMmaCore``` specialization is [here](https://github.com/bssrdf/cutl
 
 ## Shared memory swizzling implemented by cutlass
 
-The implici GEMM example uses ```cp.async``` to load activation and filter tensors from
+The implicit GEMM example uses ```cp.async``` to load activation and filter tensors from
 global memory to shared memory. The code does this is [here](https://github.com/NVIDIA/cutlass/blob/main/include/cutlass/conv/threadblock/implicit_gemm_multistage.h) with relevant lines as below
 ```
 void copy_tiles_and_advance(
@@ -76,7 +76,7 @@ void copy_tiles_and_advance(
     }
 }
 ```
-Here ```this->smem_iterator_A_.get()``` returns a pointer to the location in shared memory where the element is being accessed. Note that the address is already pointing to permuted/swizzled offset. The key class for achieving this is ```RegularTileAccessIterator``` specialized with ```layout::TensorOpMultiplicandCrosswise<                               sizeof_bits<Element_>::value, Crosswise>``` located in https://github.com/NVIDIA/cutlass/blob/5b76420d6ae0ec0dbf82dc19317890551bffb1a6/include/cutlass/transform/threadblock/regular_tile_access_iterator_tensor_op.h#L435. Here ```TensorRef``` is templated as ```TensorRef<Element, Layout>``` where ```Layout``` is of type ```template <int ElementSize, int Crosswise>
+Here ```this->smem_iterator_A_.get()``` returns a pointer to the location in shared memory where the element is being accessed. Note that the address is already pointing to permuted/swizzled offset. The key class for achieving this is ```RegularTileAccessIterator``` specialized with ```layout::TensorOpMultiplicandCrosswise<                               sizeof_bits<Element_>::value, Crosswise>``` located [here](https://github.com/NVIDIA/cutlass/blob/5b76420d6ae0ec0dbf82dc19317890551bffb1a6/include/cutlass/transform/threadblock/regular_tile_access_iterator_tensor_op.h#L435). Here ```TensorRef``` is templated as ```TensorRef<Element, Layout>``` where ```Layout``` is of type ```template <int ElementSize, int Crosswise>
 struct RowMajorTensorOpMultiplicandCrosswise```. In this struct, the address swizzling is done by a [Base object](https://github.com/NVIDIA/cutlass/blob/5b76420d6ae0ec0dbf82dc19317890551bffb1a6/include/cutlass/layout/tensor_op_multiplicand_sm75.h#L151). The logic of swizzling is wrapped in ```operator()``` function of the Base Object, which is called in ```TensorRef<Element, Layout>```'s ```offset()``` function
 ```
 /// Computes the offset of an index from the origin of the tensor
