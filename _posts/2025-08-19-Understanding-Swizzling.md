@@ -9,10 +9,26 @@ The ```DefaultConv2dFprop``` is [here](https://github.com/bssrdf/cutlass/blob/5b
 The ```DefaultMmaCore``` specialization is [here](https://github.com/bssrdf/cutlass/blob/5b76420d6ae0ec0dbf82dc19317890551bffb1a6/include/cutlass/gemm/threadblock/default_mma_core_sm80.h#L1390)
 
 
+Other important source code files are:
+- [mma_base.h](https://github.com/NVIDIA/cutlass/blob/main/include/cutlass/gemm/threadblock/mma_base.h) where ```MmaPolicy``` template is defined
+- [tensor_ref.h](https://github.com/NVIDIA/cutlass/blob/main/include/cutlass/tensor_ref.h)
+- [tensor_coords.h](https://github.com/NVIDIA/cutlass/blob/main/include/cutlass/tensor_coords.h)
+- [tensor.h](https://github.com/NVIDIA/cutlass/blob/main/include/cutlass/layout/tensor.h)
+- [device_kernel.h](https://github.com/NVIDIA/cutlass/blob/main/include/cutlass/device_kernel.h) where the underlying cuda kernel is actually instantiated and executed
+- [array.h](https://github.com/NVIDIA/cutlass/blob/main/include/cutlass/array.h)
+- [memory_sm80.h](https://github.com/NVIDIA/cutlass/blob/5b76420d6ae0ec0dbf82dc19317890551bffb1a6/include/cutlass/arch/memory_sm80.h)
+- [conv2d_fprop_activation_tile_access_iterator_analytic.h](https://github.com/NVIDIA/cutlass/blob/5b76420d6ae0ec0dbf82dc19317890551bffb1a6/include/cutlass/conv/threadblock/conv2d_fprop_activation_tile_access_iterator_analytic.h)
+- [conv2d_fprop_activation_tile_access_iterator_optimized.h](https://github.com/NVIDIA/cutlass/blob/5b76420d6ae0ec0dbf82dc19317890551bffb1a6/include/cutlass/conv/threadblock/conv2d_fprop_activation_tile_access_iterator_optimized.h)
+- [device/implicit_gemm_convolution.h](https://github.com/NVIDIA/cutlass/blob/main/include/cutlass/conv/device/implicit_gemm_convolution.h)
+- [kernel/implicit_gemm_convolution.h](https://github.com/NVIDIA/cutlass/blob/main/include/cutlass/conv/kernel/implicit_gemm_convolution.h)
+- [implicit_gemm_multistage.h](https://github.com/NVIDIA/cutlass/blob/main/include/cutlass/conv/threadblock/implicit_gemm_multistage.h)
+- [tensor_op_multiplicand_sm75.h](https://github.com/NVIDIA/cutlass/blob/main/include/cutlass/layout/tensor_op_multiplicand_sm75.h)
+
+
 ## Shared memory swizzling implemented by cutlass
 
 The implicit GEMM example uses ```cp.async``` to load activation and filter tensors from
-global memory to shared memory. The code does this is [here](https://github.com/NVIDIA/cutlass/blob/main/include/cutlass/conv/threadblock/implicit_gemm_multistage.h) with relevant lines as below
+global memory to shared memory. The code does this is [threadblock/implicit_gemm_multistage.h](https://github.com/NVIDIA/cutlass/blob/main/include/cutlass/conv/threadblock/implicit_gemm_multistage.h) with relevant lines as below
 ```
 void copy_tiles_and_advance(
     IteratorA &iterator_A, IteratorB &iterator_B,
@@ -76,7 +92,7 @@ void copy_tiles_and_advance(
     }
 }
 ```
-Here ```this->smem_iterator_A_.get()``` returns a pointer to the location in shared memory where the element is being accessed. Note that the address is already pointing to permuted/swizzled offset. The key class for achieving this is ```RegularTileAccessIterator``` specialized with ```layout::TensorOpMultiplicandCrosswise<                               sizeof_bits<Element_>::value, Crosswise>``` located [here](https://github.com/NVIDIA/cutlass/blob/5b76420d6ae0ec0dbf82dc19317890551bffb1a6/include/cutlass/transform/threadblock/regular_tile_access_iterator_tensor_op.h#L435). Here ```TensorRef``` is templated as ```TensorRef<Element, Layout>``` where ```Layout``` is of type ```template <int ElementSize, int Crosswise>
+Here ```this->smem_iterator_A_.get()``` returns a pointer to the location in shared memory where the element is being accessed. Note that the address is already pointing to permuted/swizzled offset. The key class for achieving this is [```RegularTileAccessIterator```](https://github.com/NVIDIA/cutlass/blob/5b76420d6ae0ec0dbf82dc19317890551bffb1a6/include/cutlass/transform/threadblock/regular_tile_access_iterator_tensor_op.h#L435) specialized with ```layout::TensorOpMultiplicandCrosswise<                               sizeof_bits<Element_>::value, Crosswise>```. Here ```TensorRef``` is templated as ```TensorRef<Element, Layout>``` where ```Layout``` is of type ```template <int ElementSize, int Crosswise>
 struct RowMajorTensorOpMultiplicandCrosswise```. In this struct, the address swizzling is done by a [Base object](https://github.com/NVIDIA/cutlass/blob/5b76420d6ae0ec0dbf82dc19317890551bffb1a6/include/cutlass/layout/tensor_op_multiplicand_sm75.h#L151). The logic of swizzling is wrapped in ```operator()``` function of the Base Object, which is called in ```TensorRef<Element, Layout>```'s ```offset()``` function
 ```
 /// Computes the offset of an index from the origin of the tensor
