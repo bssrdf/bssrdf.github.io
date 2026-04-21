@@ -97,3 +97,37 @@ The `allocr` acts as a **per-graph temporary tensor allocator**. Since the backe
 - **Intermediate compute tensors** (Q, K, V, KQ, KQ_scaled, KQV, etc.) → allocated by `ggml_gallocr` → **GPU memory** (from the pre-reserved buffer)
 
 All three live in device memory, so no host-device transfers are needed during inference. The `ggml_gallocr` pattern avoids per-invocation `cudaMalloc`/`cudaFree` overhead by pre-allocating a large buffer and reusing it for temporary tensors across inference steps.
+
+## Starting with ggml_gallocr object
+
+Here's a summary of `ggml_gallocr_new_n` (lines 496–527 in ggml-alloc.c):
+
+### Purpose
+
+Creates a **graph allocator** (`ggml_gallocr_t`) that manages temporary tensor allocation for computation graphs across **multiple buffer types** (e.g., CUDA + CPU).
+
+### What It Does
+
+1. **Allocates the `ggml_gallocr` struct** and its internal arrays:
+   - `bufts[]` — buffer type pointers (one per backend, e.g., CUDA buffer type)
+   - `buffers[]` — virtual buffers (initially `NULL`, allocated later by `reserve`)
+   - `buf_tallocs[]` — dynamic tensor allocators (one per buffer type)
+   - Hash table for tensor → address mapping
+
+2. **For each buffer type**, it checks if the same type appears multiple times and **shares the `ggml_dyn_tallocr`** to avoid duplicates.
+
+3. **Creates a `ggml_dyn_tallocr`** per unique buffer type, initialized with:
+   - **Alignment** — from `ggml_backend_buft_get_alignment(buft)`
+   - **Max chunk size** — from `ggml_backend_buft_get_max_size(buft)`
+
+### Key Detail
+
+The `ggml_dyn_tallocr` is the **logical allocator** — it tracks free blocks and computes offsets, but does **not** allocate real GPU/CPU memory yet. The actual memory is allocated later when `ggml_gallocr_reserve()` is called, which triggers `ggml_vbuffer_alloc()` → `ggml_backend_buft_alloc_buffer()` → `cudaMalloc`.
+
+### Signature
+
+```c
+ggml_gallocr_t ggml_gallocr_new_n(ggml_backend_buffer_type_t * bufts, int n_bufs);
+```
+
+The simpler `ggml_gallocr_new(buft)` is just a wrapper that calls `ggml_gallocr_new_n(&buft, 1)`.
