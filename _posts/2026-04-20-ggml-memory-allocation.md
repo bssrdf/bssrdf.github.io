@@ -81,7 +81,7 @@ ggml_gallocr_reserve(allocr, worst_case_graph)
           ▼
 Per token:
   ggml_gallocr_alloc_graph(allocr, gf)
-    └── Sets tensor->data pointers into the GPU buffer
+    └── Sets tensor->data pointers into the GPU buffer(done by ggml_gallocr_init_tensor)
           │
           ▼
   ggml_backend_graph_compute(model.backend, gf)
@@ -98,7 +98,64 @@ The `allocr` acts as a **per-graph temporary tensor allocator**. Since the backe
 
 All three live in device memory, so no host-device transfers are needed during inference. The `ggml_gallocr` pattern avoids per-invocation `cudaMalloc`/`cudaFree` overhead by pre-allocating a large buffer and reusing it for temporary tensors across inference steps.
 
-## Starting with ggml_gallocr object
+## Starting with ggml_gallocr graph allocator object
+
+### Some low-level constructs
+```
+// relative memory address within an allocation that can be split into multiple buffers (chunks)
+struct buffer_address {
+    int chunk;     // index of a backend buffer
+    size_t offset; // local memory offset within the buffer
+};
+
+static const struct buffer_address GGML_BUFFER_ADDRESS_INVALID = { -1, SIZE_MAX };
+
+static bool ggml_buffer_address_less(struct buffer_address a, struct buffer_address b) {
+    return a.chunk != b.chunk ? a.chunk < b.chunk : a.offset < b.offset;
+}
+
+struct free_block {
+    size_t offset;
+    size_t size;
+};
+
+struct tallocr_chunk {
+    struct free_block free_blocks[MAX_FREE_BLOCKS];
+    int n_free_blocks;
+    size_t max_size;
+};
+
+struct ggml_dyn_tallocr {
+    size_t alignment;
+    size_t max_chunk_size;
+    struct tallocr_chunk * chunks[GGML_VBUFFER_MAX_CHUNKS];
+    int n_chunks;
+
+};
+
+struct hash_node {
+    int n_children;
+    int n_views;
+    int buffer_id;
+    struct buffer_address addr;
+    bool allocated;
+};
+
+struct tensor_alloc {
+    int buffer_id;
+    struct buffer_address addr;
+    size_t size_max; // 0 = pre-allocated, unused, or view
+};
+
+struct leaf_alloc {
+    struct tensor_alloc leaf;
+};
+
+struct node_alloc {
+    struct tensor_alloc dst;
+    struct tensor_alloc src[GGML_MAX_SRC];
+};
+```
 
 Here's a summary of `ggml_gallocr_new_n` (lines 496–527 in ggml-alloc.c):
 
@@ -131,3 +188,33 @@ ggml_gallocr_t ggml_gallocr_new_n(ggml_backend_buffer_type_t * bufts, int n_bufs
 ```
 
 The simpler `ggml_gallocr_new(buft)` is just a wrapper that calls `ggml_gallocr_new_n(&buft, 1)`.
+
+
+The actual assignment of memory address to tensors happens in `ggml-backend.cpp`
+
+```
+enum ggml_status ggml_backend_tensor_alloc(ggml_backend_buffer_t buffer, struct ggml_tensor * tensor, void * addr) {
+    GGML_ASSERT(tensor);
+    GGML_ASSERT(tensor->buffer == NULL);
+    GGML_ASSERT(tensor->data == NULL);
+    GGML_ASSERT(tensor->view_src == NULL);
+    GGML_ASSERT(addr >= ggml_backend_buffer_get_base(buffer));
+    GGML_ASSERT((char *)addr + ggml_backend_buffer_get_alloc_size(buffer, tensor) <=
+                (char *)ggml_backend_buffer_get_base(buffer) + ggml_backend_buffer_get_size(buffer));
+
+    tensor->buffer = buffer;
+    tensor->data = addr;
+    return ggml_backend_buffer_init_tensor(buffer, tensor);
+}
+```
+which is called in `ggml-alloc.c`
+```
+static void ggml_vbuffer_tensor_alloc(struct vbuffer * buf, struct ggml_tensor * tensor, struct buffer_address buf_addr) {
+    void * base = ggml_backend_buffer_get_base(buf->chunks[buf_addr.chunk]);
+    void * addr = (char *)base + buf_addr.offset;
+    ggml_backend_tensor_alloc(buf->chunks[buf_addr.chunk], tensor, addr);
+}
+```
+
+which is called by `ggml_gallocr_init_tensor`.
+
