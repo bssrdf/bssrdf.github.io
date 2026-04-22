@@ -218,3 +218,14 @@ static void ggml_vbuffer_tensor_alloc(struct vbuffer * buf, struct ggml_tensor *
 
 which is called by `ggml_gallocr_init_tensor`.
 
+## An Alternative way of allocating tensor memory
+
+`gml_backend_alloc_ctx_tensors` can also be used to allocate memory. It is often used by weight tensors during model loading. The weight tensors need to stay in the memory all the time and they don't vary.
+
+### The Workflow
+ - define tensors with an `ggml_context * ctx`
+ - call `ggml_backend_alloc_ctx_tensors(ctx, backend);`
+
+ The actual work is done by `ggml_backend_alloc_ctx_tensors_from_buft_impl(struct ggml_context * ctx, ggml_backend_buffer_type_t buft, size_t * nbytes_total, bool no_alloc)` in which `alloc_tensor_range(ctx, first, t, buft, cur_buf_size, &buffers, &n_buffers)` does all the heavy lifting. It first calls `ggml_backend_buft_alloc_buffer(buft, size)` to allocate buffer on the backend device. Then for each tensor `t`, it does `ggml_tallocr_alloc(&tallocr, t);`. In `ggml_tallocr_alloc`, `ggml_backend_tensor_alloc` is called to assign data pointers to the address within the buffer, and this is done by `ggml_backend_buffer_init_tensor(buffer, tensor);` which is the same as before.
+
+
